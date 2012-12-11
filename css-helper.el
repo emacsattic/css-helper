@@ -50,7 +50,6 @@
 ;;
 ;;; TODO:
 ;; - test suite
-;; - simplify specificity calculation
 ;; - elpa
 ;; - sass support
 ;;
@@ -64,39 +63,16 @@
 
 (defconst css-helper-patterns
   '(:id "#[a-zA-Z0-9-_]+"
-    :class "\\.[a-zA-Z0-9-_]+"
-    :tag "^[^#\\.:\\[][a-zA-Z0-9-_]+"
-    :attr "\\[[^\\[]+\\]"
-    :pseudo-class-or-element ":[a-zA-Z0-9-_]+"
-    :pseudo-class ""
-    :pseudo-element ":first-line\\|:first-letter\\|:before\\|:after"))
+        :class "\\.[a-zA-Z0-9-_]+"
+        :tag "^[^#\\.:\\[][a-zA-Z0-9-_]+"
+        :attr "\\[[^\\[]+\\]"
+        :pseudo-class-or-element ":[a-zA-Z0-9-_]+"
+        :pseudo-class ""
+        :pseudo-element ":first-line\\|:first-letter\\|:before\\|:after"))
 
-(defun css-helper-match-pattern-p (type part)
+(defun css-helper-match (type part)
   "Check a part against a pattern in the patterns list given by type."
   (string-match (plist-get css-helper-patterns type) part))
-
-(defun css-helper-matcher (type)
-  "Returns matcher function for a given type. Behave smartly for `:pseudo-class'
-because Emacs regex doesn't do look ahead, so we cannot find them directly."
-  (if (eq type :pseudo-class)
-      (lambda (part)
-        (and (css-helper-match-pattern-p :pseudo-class-or-element part)
-             (not (css-helper-match-pattern-p :pseudo-element part))
-             part))
-    (lambda (part)
-      (and (css-helper-match-pattern-p type part) part))))
-
-(defun css-helper-filter-by (type parts)
-  (delq nil (mapcar (css-helper-matcher type) parts)))
-
-(defun css-helper-categorize (parts)
-  (let* ((categories (make-hash-table :test 'equal)))
-    (dolist (type css-helper-patterns)
-      (when (symbolp type)
-        (puthash type
-                 (css-helper-filter-by type parts)
-                 categories)))
-    categories))
 
 (defun css-helper-parse-selector (selector)
   (let* ((chunker "\\([#\\.:]?[a-zA-Z0-9-_]+\\|\\[[^\\[]+\\]\\)")
@@ -112,26 +88,26 @@ because Emacs regex doesn't do look ahead, so we cannot find them directly."
 See http://www.w3.org/TR/CSS21/cascade.html#specificity for more detail.
 "
   (let* ((parts (css-helper-parse-selector selector))
-         (categories (css-helper-categorize parts))
-         (ids (gethash :id categories))
-         (class-likes (append (gethash :attr categories)
-                              (gethash :class categories)
-                              (gethash :pseudo-class categories)))
-         (tag-likes (append (gethash :tag categories)
-                            (gethash :pseudo-element categories))))
-    (mapcar #'length (list ids class-likes tag-likes))))
-
-(defun css-helper-calculate-specificity (selector)
-  (let* ((parts (css-helper-parse-selector selector)))
+         (ids '())
+         (class-likes '())
+         (tag-likes '()))
     (dolist (part parts)
-      (cond )))
+      (cond ((css-helper-match :id part) (add-to-list 'ids part))
+            ((css-helper-match :class part) (add-to-list 'class-likes part))
+            ((css-helper-match :tag part) (add-to-list 'tag-likes part))
+            ((css-helper-match :attr part) (add-to-list 'class-likes part))
+            ((css-helper-match :pseudo-element part) (add-to-list 'tag-likes part))
+            ((and (css-helper-match :pseudo-class-or-element part)
+                  (not (css-helper-match :pseudo-element part)))
+             (add-to-list 'class-likes part))))
+    (mapcar #'length (list ids class-likes tag-likes))))
 
 (defun css-helper-detect-category-and-key (selector)
   (let* ((parts (split-string selector " "))
          (last (car (last parts))))
-    (cond ((css-helper-match-pattern-p :id last) `("id" ,last))
-          ((css-helper-match-pattern-p :class last) `("class" ,last))
-          ((css-helper-match-pattern-p :tag last) `("tag" ,last))
+    (cond ((css-helper-match :id last) `("id" ,last))
+          ((css-helper-match :class last) `("class" ,last))
+          ((css-helper-match :tag last) `("tag" ,last))
           (t '("universal" "*")))))
 
 ;;;###autoload
