@@ -103,7 +103,7 @@ See http://www.w3.org/TR/CSS21/cascade.html#specificity for more detail.
     (mapcar #'length (list ids class-likes tag-likes))))
 
 (defun css-helper-detect-category-and-key (selector)
-  (let* ((parts (split-string selector " "))
+  (let* ((parts (split-string selector "[ \f\t\n\r\v~>+{]+" t))
          (last (car (last parts))))
     (cond ((css-helper-match :id last) `("id" ,last))
           ((css-helper-match :class last) `("class" ,last))
@@ -117,9 +117,8 @@ Inspired by https://github.com/josh/css-explain/"
   (interactive)
   (let* ((selector (buffer-substring-no-properties
                     (line-beginning-position) (line-end-position)))
-         (parts (split-string selector " "))
-         (specificity (css-helper-calculate-specificity parts))
-         (category-and-key (css-helper-detect-category-and-key parts)))
+         (specificity (css-helper-calculate-specificity selector))
+         (category-and-key (css-helper-detect-category-and-key selector)))
     ;; Vector conversion just for better string representation.
     (message "%s %s"
              (apply #'vector specificity)
